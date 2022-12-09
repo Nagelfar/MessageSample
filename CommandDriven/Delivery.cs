@@ -4,7 +4,7 @@ using RabbitMQ.Client.Events;
 
 namespace MessageSample.CommandDriven;
 
-public class Delivery : IDisposable
+public class Delivery : IDisposable, IHostedService
 {
     private readonly ILogger<Delivery> _logger;
     private readonly IModel _model;
@@ -26,16 +26,23 @@ public class Delivery : IDisposable
         _model.BasicAck(ea.DeliveryTag, false);
     }
 
-    public void Start()
-    {
-        _model.BasicConsume(queue: Topology.DeliveryQueue,
-            autoAck: false,
-            consumer: _consumer);
-    }
-
     public void Dispose()
     {
         _model.Abort();
         _model.Dispose();
+    }
+
+    public Task StartAsync(CancellationToken cancellationToken)
+    {
+        _model.BasicConsume(queue: Topology.DeliveryQueue,
+            autoAck: false,
+            consumer: _consumer);
+        return Task.CompletedTask;
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        _model.Abort();
+        return Task.CompletedTask;
     }
 }

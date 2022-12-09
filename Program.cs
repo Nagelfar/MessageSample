@@ -1,5 +1,4 @@
 using MessageSample;
-using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using RabbitMQ.Client;
 using Serilog;
 
@@ -24,8 +23,16 @@ builder.Services.AddSingleton<IConnection>(_ =>
     return factory.CreateConnection();
 });
 
-MessageSample.CommandDriven.Topology.Configure(builder);
-MessageSample.CommandDrivenPipeline.Topology.Configure(builder);
+if (builder.Configuration.GetValue<bool>("Consumers"))
+{
+    Log.Logger.Information("Starting Consumers");
+    MessageSample.CommandDriven.Topology.Configure(builder);
+    MessageSample.CommandDrivenPipeline.Topology.Configure(builder);
+}
+else
+{
+    Log.Logger.Information("Not starting the Consumers");
+}
 
 var app = builder.Build();
 
@@ -42,7 +49,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-MessageSample.CommandDriven.Topology.DefineAndRunTopology(app);
+MessageSample.CommandDriven.Topology.DefineTopology(app);
 MessageSample.CommandDrivenPipeline.Topology.DefineTopology(app);
 
 app.Run();
