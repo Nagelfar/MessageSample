@@ -26,7 +26,36 @@ public class FoodPreparation : IDisposable, IHostedService
         if (deserialized.Food.Any())
         {
             _logger.LogInformation("EventDriven: Will start cooking {@Food}", deserialized.Food);
+            Thread.Sleep(1000);
+            _logger.LogInformation("EventDriven: Finished cooking {@Food}", deserialized.Food);
+            try
+            {
+                _model.TxSelect();
+                var foodCookedEvents =
+                    deserialized.Food
+                        .Select(food => new FoodCooked
+                        {
+                            Food = food,
+                            Order = deserialized.Order
+                        })
+                        .ToArray();
+                foreach (var foodCookedEvent in foodCookedEvents)
+                {
+                    _model.BasicPublish(
+                        Topology.FoodPreparationTopic,
+                        routingKey: "",
+                        body: foodCookedEvent.Serialize(),
+                        mandatory: true);
+                }
+                _model.TxCommit();
+            }
+            catch 
+            {
+                _model.TxRollback();
+                throw;
+            }
         }
+
         _model.BasicAck(ea.DeliveryTag, false);
     }
 

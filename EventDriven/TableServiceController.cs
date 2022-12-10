@@ -42,7 +42,7 @@ public class TableServiceController : ControllerBase
         
         var serialized = JsonSerializer.Serialize(orderPlaced);
         var body = Encoding.UTF8.GetBytes(serialized);
-        _model.BasicPublish(exchange: Topology.OrdersTopic, "", body: body);
+        _model.BasicPublish(exchange: Topology.TableServiceTopic, "", body: body);
         
         return this.Ok();
     }

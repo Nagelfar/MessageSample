@@ -1,6 +1,4 @@
-using MessageSample.CommandDriven;
 using RabbitMQ.Client;
-
 
 namespace MessageSample.CommandDrivenPipeline;
 
@@ -25,33 +23,39 @@ public static class Topology
     }
 
     private static void ConfigureFor<TMessage>(this WebApplicationBuilder builder, string queue)
+        where TMessage : notnull
     {
         builder.Services.AddHostedService(services =>
             new RabbitMqEventHandler<TMessage>(
                 services.GetRequiredService<IConnection>(),
                 queue,
                 new DeserializingHandler<TMessage>(
-                    services.GetRequiredService<IHandleMessage<TMessage>>()
+                    services.ResolveHandler<TMessage>()
                 )
             )
         );
     }
 
-    private static IHandleMessage<object> Resolve<T>(this IServiceProvider services)
+    private static IHandleMessage<T> ResolveHandler<T>(this IServiceProvider services) where T : notnull
+    {
+        return services.GetRequiredService<IHandleMessage<T>>();
+    }
+
+    private static IHandleMessage<object> ResolveUpcast<T>(this IServiceProvider services) where T : notnull
     {
         var handler = services.GetRequiredService<IHandleMessage<T>>();
         return new UpCastHandler<T>(handler);
     }
 
     private static void ConfigureFor<TMessage>(this WebApplicationBuilder builder, string queue,
-        Func<IServiceProvider, IEnumerable<IHandleMessage<object>>> handlerFactory)
+        Func<IServiceProvider, IEnumerable<IHandleMessage<object>>> handlerFactory) where TMessage : notnull
     {
         builder.Services.AddHostedService(services =>
             new RabbitMqEventHandler<TMessage>(
                 services.GetRequiredService<IConnection>(),
                 queue,
                 new EnvelopeHandler(
-                    new FanoutHandler(
+                    new TypeMatchingHandler(
                         handlerFactory(services)
                     )
                 )
@@ -67,8 +71,8 @@ public static class Topology
         builder.ConfigureFor<CookFood>(FoodPreparationQueue);
         builder.ConfigureFor<DeliverItems>(DeliveryQueue, services => new[]
         {
-            services.Resolve<DeliverCookedFood>(),
-            services.Resolve<DeliverItems>()
+            services.ResolveUpcast<DeliverCookedFood>(),
+            services.ResolveUpcast<DeliverItems>()
         });
     }
 }

@@ -21,12 +21,17 @@ public class Delivery : IDisposable, IHostedService
 
     private void OnMessage(BasicDeliverEventArgs ea)
     {
-        var deserialized = JsonSerializer.Deserialize<OrderPlaced>(ea.Body.Span);
-        _logger.LogInformation("EventDriven: Recorded order for delivery {@Message}", deserialized);
-        if (deserialized.Drink.Any())
+        if (ea.Body.Span.TryDeserialize<OrderPlaced>() is {  } orderPlaced && orderPlaced.Drink.Any())
         {
-            _logger.LogInformation("EventDriven: Delivering drinks {@Drink}", deserialized.Drink);
+            _logger.LogInformation("EventDriven: Recorded order for delivery {@Message}", orderPlaced);
+            if (orderPlaced.Drink.Any())
+                _logger.LogInformation("EventDriven: Delivering drinks {@Drink}", orderPlaced.Drink);
         }
+        else if (ea.Body.Span.TryDeserialize<FoodCooked>() is { } foodCooked)
+        {
+            _logger.LogInformation("EventDriven: Delivering Cooked Food for {@FoodCooked}", foodCooked);
+        }
+
         _model.BasicAck(ea.DeliveryTag, false);
     }
 

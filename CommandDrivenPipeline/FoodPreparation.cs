@@ -14,6 +14,7 @@ public class FoodPreparationHandler : IHandleMessage<CookFood>
         _logger = logger;
         _model = connection.CreateModel();
     }
+
     public void Message(CookFood message)
     {
         _logger.LogInformation("CommandDrivenPipeline: Cooking Food for {@Command}", message);
@@ -24,6 +25,6 @@ public class FoodPreparationHandler : IHandleMessage<CookFood>
             Order = message.Order,
             Food = message.Food
         };
-        _model.Send(Topology.FoodPreparationQueue,Envelope.Create(command));
+        _model.Send(Topology.DeliveryQueue, Envelope.Create(command));
     }
 }

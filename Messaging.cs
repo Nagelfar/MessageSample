@@ -1,36 +1,18 @@
 using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
 namespace MessageSample;
 
-public interface IHandleMessage<in T>
+public interface IHandleMessage<in T> where T : notnull
 {
     public void Message(T message);
 }
 
-public class EventHandlerFilter<TNext> : IHandleMessage<object>
-{
-    private readonly IHandleMessage<TNext> _next;
-
-    public EventHandlerFilter(IHandleMessage<TNext> next)
-    {
-        _next = next;
-    }
-
-    public void Message(object message)
-    {
-        if (message is TNext matching)
-        {
-            _next.Message(matching);
-        }
-    }
-}
-
 public class DownCastHandler<TNext> : IHandleMessage<TNext>
+    where TNext : notnull
 {
     private readonly IHandleMessage<object> _next;
 
@@ -46,6 +28,7 @@ public class DownCastHandler<TNext> : IHandleMessage<TNext>
 }
 
 public class UpCastHandler<TNext> : IHandleMessage<object>
+    where TNext : notnull
 {
     private readonly IHandleMessage<TNext> _next;
 
@@ -63,11 +46,11 @@ public class UpCastHandler<TNext> : IHandleMessage<object>
     }
 }
 
-public class FanoutHandler : IHandleMessage<Envelope>
+public class TypeMatchingHandler : IHandleMessage<Envelope>
 {
     private readonly ImmutableDictionary<Type, IHandleMessage<object>> _handlers;
 
-    public FanoutHandler(IEnumerable<IHandleMessage<object>> handlers)
+    public TypeMatchingHandler(IEnumerable<IHandleMessage<object>> handlers)
     {
         _handlers = handlers.ToImmutableDictionary(h => h.GetType().GetGenericArguments().First());
     }
@@ -92,28 +75,27 @@ public class EnvelopeHandler : IHandleMessage<BasicDeliverEventArgs>
     {
         try
         {
-            if (message.BasicProperties != null)
-            {
-                var type = Type.GetType(message.BasicProperties.Type);
-                var deserialized = message.Body.Span.Deserialize(type);
-                var envelope =
-                    new Envelope
-                    {
-                        Type = type,
-                        Body = deserialized,
-                    };
-                _handler.Message(envelope);
-            }
+            if (message.BasicProperties == null || string.IsNullOrEmpty(message.BasicProperties.Type))
+                throw new Exception("Expecting an envelope type");
+            var type = Type.GetType(message.BasicProperties.Type);
+            if (type is null)
+                throw new Exception($"Provided type {message.BasicProperties.Type} is an invalid CLR Type");
+            var deserialized = message.Body.Span.Deserialize(type);
+            if (deserialized is null)
+                throw new Exception("Could not deserialize ${type} from body");
+            var envelope = new Envelope(type, deserialized);
+            _handler.Message(envelope);
         }
         catch (Exception e)
         {
             var content = Encoding.UTF8.GetString(message.Body.Span);
-            throw new Exception("Failed to handle: " + content, e);
+            throw new Exception("Failed to handle message with body: " + content, e);
         }
     }
 }
 
 public class DeserializingHandler<T> : IHandleMessage<BasicDeliverEventArgs>
+    where T : notnull
 {
     private readonly IHandleMessage<T> _next;
 
@@ -150,7 +132,7 @@ public class RabbitMqEventHandler<TNeededToMakeTheHostUnique> : IHostedService, 
         _next = next;
         _model = connection.CreateModel();
         _consumer = new EventingBasicConsumer(_model);
-        _consumer.Received += (model, ea) => { OnMessage(ea); };
+        _consumer.Received += (_, ea) => { OnMessage(ea); };
     }
 
     private void OnMessage(BasicDeliverEventArgs ea)
@@ -191,18 +173,19 @@ public class RabbitMqEventHandler<TNeededToMakeTheHostUnique> : IHostedService, 
 
 public class Envelope
 {
-    public static Envelope Create<T>(T content)
+    public Envelope(Type type, object body)
     {
-        return new Envelope
-        {
-            Body = content!,
-            Type = typeof(T)
-        };
+        Type = type;
+        Body = body;
     }
 
-    public Type Type { get; init; }
+    public static Envelope Create<T>(T content) where T : notnull
+    {
+        return new Envelope(typeof(T), content);
+    }
 
-    public object Body { get; init; }
+    public Type Type { get; }
+    public object Body { get; }
 }
 
 public static class EnvelopeExtensions
@@ -213,9 +196,33 @@ public static class EnvelopeExtensions
         return Encoding.UTF8.GetBytes(serialized);
     }
 
-    public static T? Deserialize<T>(this ReadOnlySpan<byte> bytes)
+    public static T? TryDeserialize<T>(this ReadOnlySpan<byte> bytes)
     {
-        return JsonSerializer.Deserialize<T>(bytes);
+        try
+        {
+            return JsonSerializer.Deserialize<T>(bytes);
+        }
+        catch (JsonException)
+        {
+            return default;
+        }
+    }
+
+    public static T Deserialize<T>(this ReadOnlySpan<byte> bytes)
+    {
+        try
+        {
+            var result = JsonSerializer.Deserialize<T>(bytes);
+            if (result is null)
+                throw new Exception(
+                    $"Could not deserialize {Encoding.UTF8.GetString(bytes)} into {typeof(T).FullName}");
+            return result;
+        }
+        catch (JsonException e)
+        {
+            var content = Encoding.UTF8.GetString(bytes);
+            throw new JsonException($"Could not deserialize {content}", e);
+        }
     }
 
     public static object? Deserialize(this ReadOnlySpan<byte> bytes, Type type)
@@ -230,25 +237,5 @@ public static class EnvelopeExtensions
         model.BasicPublish("", queue,
             basicProperties: properties,
             body: envelope.Body.Serialize());
-    }
-
-
-    public static string Serialize(this Envelope envelope)
-    {
-        return JsonSerializer.Serialize(envelope);
-    }
-
-    public static Envelope Deserialize<T>(this string value)
-    {
-        try
-        {
-            var envelope = JsonSerializer.Deserialize<Envelope>(value);
-            // if (envelope.Type == typeof(T).FullName)
-            return envelope;
-        }
-        catch (Exception e)
-        {
-            return null;
-        }
     }
 }
