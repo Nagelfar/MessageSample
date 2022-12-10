@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
@@ -20,9 +21,16 @@ public class FoodPreparation : IDisposable, IHostedService
 
     private void OnMessage(BasicDeliverEventArgs ea)
     {
-        var body = ea.Body.ToArray();
-        var message = Encoding.UTF8.GetString(body);
-        _logger.LogInformation("Cooking Food for {@Message}", message);
+        var deserialized = ea.Body.Span.Deserialize<CookFood>();
+        _logger.LogInformation("CommandDriven: Cooking Food for {@Message}", deserialized);
+        Thread.Sleep(2000);
+        _logger.LogInformation("CommandDriven: Food was cooked for {@Message}", deserialized);
+        var command = new DeliverCookedFood
+        {
+            Order = deserialized.Order,
+            Food = deserialized.Food
+        };
+        _model.BasicPublish(exchange: "", routingKey: Topology.DeliveryQueue, body: command.Serialize());
         _model.BasicAck(ea.DeliveryTag, false);
     }
 

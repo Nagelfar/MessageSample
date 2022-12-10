@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -11,6 +12,107 @@ public interface IHandleMessage<in T>
     public void Message(T message);
 }
 
+public class EventHandlerFilter<TNext> : IHandleMessage<object>
+{
+    private readonly IHandleMessage<TNext> _next;
+
+    public EventHandlerFilter(IHandleMessage<TNext> next)
+    {
+        _next = next;
+    }
+
+    public void Message(object message)
+    {
+        if (message is TNext matching)
+        {
+            _next.Message(matching);
+        }
+    }
+}
+
+public class DownCastHandler<TNext> : IHandleMessage<TNext>
+{
+    private readonly IHandleMessage<object> _next;
+
+    public DownCastHandler(IHandleMessage<object> next)
+    {
+        _next = next;
+    }
+
+    public void Message(TNext message)
+    {
+        _next.Message(message);
+    }
+}
+
+public class UpCastHandler<TNext> : IHandleMessage<object>
+{
+    private readonly IHandleMessage<TNext> _next;
+
+    public UpCastHandler(IHandleMessage<TNext> next)
+    {
+        _next = next;
+    }
+
+    public void Message(object message)
+    {
+        if (message is TNext matching)
+        {
+            _next.Message(matching);
+        }
+    }
+}
+
+public class FanoutHandler : IHandleMessage<Envelope>
+{
+    private readonly ImmutableDictionary<Type, IHandleMessage<object>> _handlers;
+
+    public FanoutHandler(IEnumerable<IHandleMessage<object>> handlers)
+    {
+        _handlers = handlers.ToImmutableDictionary(h => h.GetType().GetGenericArguments().First());
+    }
+
+    public void Message(Envelope message)
+    {
+        var handler = _handlers[message.Type];
+        handler.Message(message.Body);
+    }
+}
+
+public class EnvelopeHandler : IHandleMessage<BasicDeliverEventArgs>
+{
+    private readonly IHandleMessage<Envelope> _handler;
+
+    public EnvelopeHandler(IHandleMessage<Envelope> handler)
+    {
+        _handler = handler;
+    }
+
+    public void Message(BasicDeliverEventArgs message)
+    {
+        try
+        {
+            if (message.BasicProperties != null)
+            {
+                var type = Type.GetType(message.BasicProperties.Type);
+                var deserialized = message.Body.Span.Deserialize(type);
+                var envelope =
+                    new Envelope
+                    {
+                        Type = type,
+                        Body = deserialized,
+                    };
+                _handler.Message(envelope);
+            }
+        }
+        catch (Exception e)
+        {
+            var content = Encoding.UTF8.GetString(message.Body.Span);
+            throw new Exception("Failed to handle: " + content, e);
+        }
+    }
+}
+
 public class DeserializingHandler<T> : IHandleMessage<BasicDeliverEventArgs>
 {
     private readonly IHandleMessage<T> _next;
@@ -22,15 +124,14 @@ public class DeserializingHandler<T> : IHandleMessage<BasicDeliverEventArgs>
 
     public void Message(BasicDeliverEventArgs command)
     {
-        var body = command.Body.ToArray();
         try
         {
-            var content = JsonSerializer.Deserialize<T>(body);
+            var content = command.Body.Span.Deserialize<T>();
             _next.Message(content);
         }
         catch (Exception e)
         {
-            var content = Encoding.UTF8.GetString(body);
+            var content = Encoding.UTF8.GetString(command.Body.Span);
             throw new Exception("Failed to deserialize: " + content, e);
         }
     }
@@ -94,21 +195,44 @@ public class Envelope
     {
         return new Envelope
         {
-            Body = JsonSerializer.SerializeToNode(content)!,
-            Type = typeof(T).FullName!,
-            SentAt = DateTime.Now
+            Body = content!,
+            Type = typeof(T)
         };
     }
 
-    public DateTime SentAt { get; init; }
+    public Type Type { get; init; }
 
-    public string Type { get; init; }
-
-    public JsonNode Body { get; init; }
+    public object Body { get; init; }
 }
 
 public static class EnvelopeExtensions
 {
+    public static byte[] Serialize<T>(this T value)
+    {
+        var serialized = JsonSerializer.Serialize(value);
+        return Encoding.UTF8.GetBytes(serialized);
+    }
+
+    public static T? Deserialize<T>(this ReadOnlySpan<byte> bytes)
+    {
+        return JsonSerializer.Deserialize<T>(bytes);
+    }
+
+    public static object? Deserialize(this ReadOnlySpan<byte> bytes, Type type)
+    {
+        return JsonSerializer.Deserialize(bytes, type);
+    }
+
+    public static void Send(this IModel model, string queue, Envelope envelope)
+    {
+        var properties = model.CreateBasicProperties();
+        properties.Type = envelope.Type.FullName;
+        model.BasicPublish("", queue,
+            basicProperties: properties,
+            body: envelope.Body.Serialize());
+    }
+
+
     public static string Serialize(this Envelope envelope)
     {
         return JsonSerializer.Serialize(envelope);

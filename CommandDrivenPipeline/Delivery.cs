@@ -1,6 +1,8 @@
+using MessageSample.CommandDriven;
+
 namespace MessageSample.CommandDrivenPipeline;
 
-public class DeliveryHandler : IHandleMessage<DeliverItems>
+public class DeliveryHandler : IHandleMessage<DeliverItems>, IHandleMessage<DeliverCookedFood>
 {
     private readonly ILogger<DeliveryHandler> _logger;
 
@@ -11,6 +13,11 @@ public class DeliveryHandler : IHandleMessage<DeliverItems>
 
     public void Message(DeliverItems command)
     {
-        _logger.LogInformation("Delivery items for {@Command}", command);
+        _logger.LogInformation("CommandDrivenPipeline: Deliver ordered items for {@Message}", command);
+    }
+
+    public void Message(DeliverCookedFood message)
+    {
+        _logger.LogInformation("CommandDrivenPipeline: Deliver Cooked Food for {@Message}", message);
     }
 }

@@ -12,11 +12,15 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Host.UseSerilog();
 
-builder.Services.AddControllers();
+if (builder.Configuration.GetValue<bool>("Controllers"))
+{
+    builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(setup =>
-    setup.CustomSchemaIds(x => x.FullName));
+    builder.Services.AddEndpointsApiExplorer();
+    builder.Services.AddSwaggerGen(setup =>
+        setup.CustomSchemaIds(x => x.FullName));
+}
+
 builder.Services.AddSingleton<IConnection>(_ =>
 {
     var factory = new ConnectionFactory() { HostName = "localhost" };
@@ -27,6 +31,7 @@ if (builder.Configuration.GetValue<bool>("Consumers"))
 {
     Log.Logger.Information("Starting Consumers");
     MessageSample.CommandDriven.Topology.Configure(builder);
+    MessageSample.EventDriven.Topology.Configure(builder);
     MessageSample.CommandDrivenPipeline.Topology.Configure(builder);
 }
 else
@@ -36,20 +41,24 @@ else
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+if (builder.Configuration.GetValue<bool>("Controllers"))
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+// Configure the HTTP request pipeline.
+    if (app.Environment.IsDevelopment())
+    {
+        app.UseSwagger();
+        app.UseSwaggerUI();
+    }
+
+    app.UseHttpsRedirection();
+
+    app.UseAuthorization();
+
+    app.MapControllers();
 }
 
-app.UseHttpsRedirection();
-
-app.UseAuthorization();
-
-app.MapControllers();
-
 MessageSample.CommandDriven.Topology.DefineTopology(app);
+MessageSample.EventDriven.Topology.DefineTopology(app);
 MessageSample.CommandDrivenPipeline.Topology.DefineTopology(app);
 
 app.Run();

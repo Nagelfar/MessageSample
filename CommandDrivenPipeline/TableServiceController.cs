@@ -33,9 +33,7 @@ public class TableServiceController : ControllerBase
 
         foreach (var command in cookFoodCommands)
         {
-            var serialized = JsonSerializer.Serialize(command);
-            var body = Encoding.UTF8.GetBytes(serialized);
-            _model.BasicPublish(exchange: "", routingKey: Topology.FoodPreparationQueue, body: body);
+            _model.Send(Topology.FoodPreparationQueue, Envelope.Create(command));
         }
     }
 
@@ -47,10 +45,7 @@ public class TableServiceController : ControllerBase
             Drinks = drink,
             Guest = guest
         };
-
-        var serialized = JsonSerializer.Serialize(command);
-        var body = Encoding.UTF8.GetBytes(serialized);
-        _model.BasicPublish(exchange: "", routingKey: Topology.DeliveryQueue, body: body);
+        _model.Send(Topology.DeliveryQueue, Envelope.Create(command));
     }
 
     [HttpPost("orders")]

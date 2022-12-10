@@ -1,3 +1,4 @@
+using MessageSample.CommandDriven;
 using RabbitMQ.Client;
 
 
@@ -36,11 +37,38 @@ public static class Topology
         );
     }
 
+    private static IHandleMessage<object> Resolve<T>(this IServiceProvider services)
+    {
+        var handler = services.GetRequiredService<IHandleMessage<T>>();
+        return new UpCastHandler<T>(handler);
+    }
+
+    private static void ConfigureFor<TMessage>(this WebApplicationBuilder builder, string queue,
+        Func<IServiceProvider, IEnumerable<IHandleMessage<object>>> handlerFactory)
+    {
+        builder.Services.AddHostedService(services =>
+            new RabbitMqEventHandler<TMessage>(
+                services.GetRequiredService<IConnection>(),
+                queue,
+                new EnvelopeHandler(
+                    new FanoutHandler(
+                        handlerFactory(services)
+                    )
+                )
+            )
+        );
+    }
+
     public static void Configure(WebApplicationBuilder builder)
     {
         builder.Services.AddTransient<IHandleMessage<CookFood>, FoodPreparationHandler>();
         builder.Services.AddTransient<IHandleMessage<DeliverItems>, DeliveryHandler>();
+        builder.Services.AddTransient<IHandleMessage<DeliverCookedFood>, DeliveryHandler>();
         builder.ConfigureFor<CookFood>(FoodPreparationQueue);
-        builder.ConfigureFor<DeliverItems>(DeliveryQueue);
+        builder.ConfigureFor<DeliverItems>(DeliveryQueue, services => new[]
+        {
+            services.Resolve<DeliverCookedFood>(),
+            services.Resolve<DeliverItems>()
+        });
     }
 }

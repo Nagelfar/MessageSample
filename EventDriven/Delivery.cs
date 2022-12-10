@@ -3,7 +3,7 @@ using System.Text.Json;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
-namespace MessageSample.CommandDriven;
+namespace MessageSample.EventDriven;
 
 public class Delivery : IDisposable, IHostedService
 {
@@ -21,13 +21,12 @@ public class Delivery : IDisposable, IHostedService
 
     private void OnMessage(BasicDeliverEventArgs ea)
     {
-        if (ea.Body.Span.Deserialize<DeliverItems>() is { Guest: > 0 } deliver)
-            _logger.LogInformation("CommandDriven: Delivering Order Items for {@Message}", deliver);
-        else if (ea.Body.Span.Deserialize<DeliverCookedFood>() is { } cooked)
+        var deserialized = JsonSerializer.Deserialize<OrderPlaced>(ea.Body.Span);
+        _logger.LogInformation("EventDriven: Recorded order for delivery {@Message}", deserialized);
+        if (deserialized.Drink.Any())
         {
-            _logger.LogInformation("CommandDriven: Delivering Cooked Food for {@Message}", cooked);
+            _logger.LogInformation("EventDriven: Delivering drinks {@Drink}", deserialized.Drink);
         }
-
         _model.BasicAck(ea.DeliveryTag, false);
     }
 
@@ -39,7 +38,7 @@ public class Delivery : IDisposable, IHostedService
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        _model.BasicConsume(queue: Topology.DeliveryQueue,
+        _model.BasicConsume(queue: Topology.DeliverySubscription,
             autoAck: false,
             consumer: _consumer);
         return Task.CompletedTask;

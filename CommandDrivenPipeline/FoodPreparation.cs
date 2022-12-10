@@ -7,13 +7,23 @@ namespace MessageSample.CommandDrivenPipeline;
 public class FoodPreparationHandler : IHandleMessage<CookFood>
 {
     private readonly ILogger<FoodPreparationHandler> _logger;
+    private readonly IModel _model;
 
-    public FoodPreparationHandler(ILogger<FoodPreparationHandler> logger)
+    public FoodPreparationHandler(ILogger<FoodPreparationHandler> logger, IConnection connection)
     {
         _logger = logger;
+        _model = connection.CreateModel();
     }
-    public void Message(CookFood command)
+    public void Message(CookFood message)
     {
-        _logger.LogInformation("Cooking Food for {@Command}", command);
+        _logger.LogInformation("CommandDrivenPipeline: Cooking Food for {@Command}", message);
+        Thread.Sleep(2000);
+        _logger.LogInformation("CommandDrivenPipeline: Food was cooked for {@Message}", message);
+        var command = new DeliverCookedFood
+        {
+            Order = message.Order,
+            Food = message.Food
+        };
+        _model.Send(Topology.FoodPreparationQueue,Envelope.Create(command));
     }
 }
