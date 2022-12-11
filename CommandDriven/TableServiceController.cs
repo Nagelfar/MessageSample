@@ -5,7 +5,7 @@ using RabbitMQ.Client;
 
 namespace MessageSample.CommandDriven;
 
-public class Order
+public class OrderRequest
 {
     public int Guest { get; set; }
     public int[] Food { get; set; }
@@ -53,7 +53,7 @@ public class TableServiceController : ControllerBase
     }
 
     [HttpPost("orders")]
-    public object Post(Order? order)
+    public object Post(OrderRequest? order)
     {
         if (order == null || order.Guest < 0 || order.Food.Any(food => food < 0) || order.Drink.Any(drink => drink < 0))
             return this.BadRequest("You provided an invalid model");

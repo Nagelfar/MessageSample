@@ -21,16 +21,17 @@ public class FoodPreparation : IDisposable, IHostedService
 
     private void OnMessage(BasicDeliverEventArgs ea)
     {
-        var deserialized = JsonSerializer.Deserialize<OrderPlaced>(ea.Body.Span);
-        _logger.LogInformation("EventDriven: Received order for {@Message}", deserialized);
-        if (deserialized.Food.Any())
+        try
         {
-            _logger.LogInformation("EventDriven: Will start cooking {@Food}", deserialized.Food);
-            Thread.Sleep(1000);
-            _logger.LogInformation("EventDriven: Finished cooking {@Food}", deserialized.Food);
-            try
+            _model.TxSelect();
+            var deserialized = JsonSerializer.Deserialize<OrderPlaced>(ea.Body.Span);
+            _logger.LogInformation("EventDriven: Received order for {@Message}", deserialized);
+            if (deserialized.Food.Any())
             {
-                _model.TxSelect();
+                _logger.LogInformation("EventDriven: Will start cooking {@Food}", deserialized.Food);
+                Thread.Sleep(1000);
+                _logger.LogInformation("EventDriven: Finished cooking {@Food}", deserialized.Food);
+
                 var foodCookedEvents =
                     deserialized.Food
                         .Select(food => new FoodCooked
@@ -47,16 +48,16 @@ public class FoodPreparation : IDisposable, IHostedService
                         body: foodCookedEvent.Serialize(),
                         mandatory: true);
                 }
-                _model.TxCommit();
             }
-            catch 
-            {
-                _model.TxRollback();
-                throw;
-            }
-        }
 
-        _model.BasicAck(ea.DeliveryTag, false);
+            _model.BasicAck(ea.DeliveryTag, false);
+            _model.TxCommit();
+        }
+        catch
+        {
+            _model.TxRollback();
+            throw;
+        }
     }
 
     public void Dispose()

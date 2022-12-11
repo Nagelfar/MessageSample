@@ -1,9 +1,12 @@
 using MessageSample;
 using RabbitMQ.Client;
 using Serilog;
+using Serilog.Events;
 
 Log.Logger = new LoggerConfiguration()
-    .WriteTo.Console()
+    .MinimumLevel.Override("Microsoft",LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.AspNetCore.Hosting.Diagnostics",LogEventLevel.Information)
+    .WriteTo.Console(outputTemplate:"{Timestamp:HH:mm:ss} {Level:u3} {SourceContext}] {Message:lj}{NewLine}{Exception}")
     .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
@@ -32,6 +35,7 @@ if (builder.Configuration.GetValue<bool>("Consumers"))
     Log.Logger.Information("Starting Consumers");
     MessageSample.CommandDriven.Topology.Configure(builder);
     MessageSample.EventDriven.Topology.Configure(builder);
+    MessageSample.DocumentDriven.Topology.Configure(builder);
     MessageSample.CommandDrivenPipeline.Topology.Configure(builder);
 }
 else
@@ -59,6 +63,7 @@ if (builder.Configuration.GetValue<bool>("Controllers"))
 
 MessageSample.CommandDriven.Topology.DefineTopology(app);
 MessageSample.EventDriven.Topology.DefineTopology(app);
+MessageSample.DocumentDriven.Topology.DefineTopology(app);
 MessageSample.CommandDrivenPipeline.Topology.DefineTopology(app);
 
 app.Run();

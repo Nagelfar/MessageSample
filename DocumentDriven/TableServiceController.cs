@@ -3,7 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using RabbitMQ.Client;
 
-namespace MessageSample.EventDriven;
+namespace MessageSample.DocumentDriven;
 
 public class OrderRequest
 {
@@ -13,7 +13,7 @@ public class OrderRequest
 }
 
 [ApiController]
-[Route("/eventdriven/[controller]")]
+[Route("/documentdriven/[controller]")]
 public class TableServiceController : ControllerBase
 {
     private readonly IModel _model;
@@ -32,18 +32,14 @@ public class TableServiceController : ControllerBase
             return this.BadRequest("You provided an invalid model");
         var currentOrder = Interlocked.Increment(ref Orders);
         var orderPlaced =
-            new OrderPlaced
+            new OrderDocument
             {
                 Guest = order.Guest,
                 Order = currentOrder,
-                Food = order.Food,
-                Drink = order.Drink
+                OrderedFood = order.Food,
+                OrderedDrink = order.Drink
             };
-        
-        var serialized = JsonSerializer.Serialize(orderPlaced);
-        var body = Encoding.UTF8.GetBytes(serialized);
-        _model.BasicPublish(exchange: Topology.TableServiceTopic, "", body: body);
-        
+        _model.BasicPublish(exchange: Topology.OrdersTopic, "", body: orderPlaced.Serialize());
         return this.Ok();
     }
 }
