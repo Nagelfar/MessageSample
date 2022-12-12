@@ -1,0 +1,47 @@
+version: '3.9'
+networks:
+  message-sample:
+services:
+  http-only:
+    image: mcr.microsoft.com/dotnet/sdk:7.0
+    ports:
+      - "5048:5048"
+    environment:
+      ASPNETCORE_URLS: http://+:5048
+      CUSTOMCONNSTR_RabbitMq: amqp://guest:guest@message-bus:5672
+      Controllers: true
+      Consumers: false
+    volumes:
+      - ./:/http
+    entrypoint: dotnet publish -o /tmp/ /http/MessageSample.csproj && dotnet /tmp/MessageSample.dll
+    networks:
+      - message-sample
+    depends_on:
+      - message-bus
+
+  consumers:
+    image: mcr.microsoft.com/dotnet/sdk:7.0
+    ports:
+      - "8085:8085"
+    environment:
+      ASPNETCORE_URLS: http://+:8085
+      CUSTOMCONNSTR_RabbitMq: amqp://guest:guest@message-bus:5672
+      Controllers: false
+      Consumers: true
+    volumes:
+      - ./:/consumers
+    entrypoint: dotnet run --launch-profile consumers-only --project /consumers/MessageSample.csproj
+    networks:
+      - message-sample
+    depends_on:
+      - message-bus
+  
+  message-bus:
+    image: rabbitmq:3-management
+    #    volumes:
+    #      - ./rabbitmq.conf:/etc/rabbitmq/conf.d/rabbitmq.conf 
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - message-sample
