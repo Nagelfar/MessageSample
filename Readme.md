@@ -1,5 +1,7 @@
 # Different approaches
 
+Visualizations of the different topologies used in the example
+
 ## Naive Command-based
 
 ```mermaid
@@ -17,6 +19,8 @@ graph TD
     tt --> qfp[(event-driven-foodprep)] --> F[FoodPrep]
     tt --> qd[(event-driven-delivery)]  --> D[Delivery]
     F --> |FoodCooked| tfp((event-driven-foodprep)) --> qd
+    classDef exchange fill:#f96,stroke:#333,stroke-width:4px;
+    class tt,tfp exchange
 ```
 
 ## Document Based
@@ -27,4 +31,6 @@ graph TD
     to --> qfp[(document-driven-foodprep)] --> F[FoodPrep]
     to --> qd[(document-driven-delivery)]  --> D[Delivery]
     F --> |OrderDocument| to --> qd --> D
+    classDef exchange fill:#f96,stroke:#333,stroke-width:4px;
+    class to exchange
 ``` 
