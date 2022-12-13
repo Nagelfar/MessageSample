@@ -5,8 +5,8 @@ using Serilog.Events;
 
 Log.Logger = new LoggerConfiguration()
     .Enrich.FromLogContext()
-    // .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
-    // .MinimumLevel.Override("Microsoft.AspNetCore.Hosting.Diagnostics", LogEventLevel.Information)
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.AspNetCore.Hosting.Diagnostics", LogEventLevel.Information)
     .WriteTo.Console(
         outputTemplate: "{Timestamp:HH:mm:ss} {Level:u3} {SourceContext}] {Message:lj}{NewLine}{Exception}")
     .CreateLogger();

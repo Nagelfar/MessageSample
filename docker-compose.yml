@@ -1,3 +1,4 @@
+# this is still WIP
 version: '3.9'
 networks:
   message-sample:
@@ -13,7 +14,7 @@ services:
       Consumers: false
     volumes:
       - ./:/http
-    entrypoint: dotnet publish -o /tmp/ /http/MessageSample.csproj && dotnet /tmp/MessageSample.dll
+    entrypoint: dotnet publish -o /tmp/artifacts /http/MessageSample.csproj && dotnet /tmp/artifacts/MessageSample.dll
     networks:
       - message-sample
     depends_on:
