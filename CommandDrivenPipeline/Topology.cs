@@ -41,38 +41,62 @@ public static class Topology
         return services.GetRequiredService<IHandleMessage<T>>();
     }
 
-    private static IHandleMessage<object> ResolveUpcast<T>(this IServiceProvider services) where T : notnull
+    private static IHandleMessage<Envelope> ResolveEnvelopeBody<T>(this IServiceProvider services) where T : notnull
     {
         var handler = services.GetRequiredService<IHandleMessage<T>>();
-        return new UpCastHandler<T>(handler);
+        return new EnvelopeBodyHandler<T>(handler);
+    }
+    private static IHandleMessage<Envelope> ResolveUpcastEnvelope<T>(this IServiceProvider services) where T : notnull
+    {
+        var handler = services.GetRequiredService<IHandleMessageEnvelope<T>>();
+        return new UpCastEnvelopeHandler<T>(handler);
     }
 
     private static void ConfigureFor<TMessage>(this WebApplicationBuilder builder, string queue,
-        Func<IServiceProvider, IEnumerable<IHandleMessage<object>>> handlerFactory) where TMessage : notnull
+        Func<IServiceProvider, IEnumerable<IHandleMessage<Envelope>>> handlerFactory) where TMessage : notnull
     {
         builder.Services.AddHostedService(services =>
             new RabbitMqEventHandler<TMessage>(
                 services.GetRequiredService<IConnection>(),
                 queue,
-                new EnvelopeHandler(
-                    new TypeMatchingHandler(
-                        handlerFactory(services)
+                next: new EnvelopeHandler(
+                    new IdempotencyHandler<Envelope>(
+                        new LoggingMessageHandler<Envelope>(
+                            new RetryHandler<Envelope>(
+                                maxRetries: 3,
+                                wait: TimeSpan.FromMilliseconds(500),
+                                next: new EnvelopeMatchingHandler(
+                                    handlerFactory(services)
+                                ),
+                                logger:  services.GetLogger<RetryHandler<Envelope>>()
+                            ),
+                            logger:  services.GetLogger<LoggingMessageHandler<Envelope>>()
+                            ),
+                        logger: services.GetLogger<IdempotencyHandler<Envelope>>()
                     )
                 )
             )
         );
     }
+    
+    private static ILogger<TLogger> GetLogger<TLogger>(this IServiceProvider services)
+    {
+        return services.GetRequiredService<ILoggerFactory>().CreateLogger<TLogger>();
+    }
 
     public static void Configure(WebApplicationBuilder builder)
     {
-        builder.Services.AddTransient<IHandleMessage<CookFood>, FoodPreparationHandler>();
+        builder.Services.AddTransient<IHandleMessageEnvelope<CookFood>, FoodPreparationHandler>();
         builder.Services.AddTransient<IHandleMessage<DeliverItems>, DeliveryHandler>();
         builder.Services.AddTransient<IHandleMessage<DeliverCookedFood>, DeliveryHandler>();
-        builder.ConfigureFor<CookFood>(FoodPreparationQueue);
+        builder.ConfigureFor<CookFood>(FoodPreparationQueue,services => new[]
+        {
+            services.ResolveUpcastEnvelope<CookFood>(),
+        });
         builder.ConfigureFor<DeliverItems>(DeliveryQueue, services => new[]
         {
-            services.ResolveUpcast<DeliverCookedFood>(),
-            services.ResolveUpcast<DeliverItems>()
+            services.ResolveEnvelopeBody<DeliverCookedFood>(),
+            services.ResolveEnvelopeBody<DeliverItems>()
         });
     }
 }
