@@ -2,20 +2,14 @@ using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
-using System.Text.Json;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
-namespace MessageSample;
+namespace MessageSample.CommandDrivenPipeline;
 
 public interface IHandleMessage<in T> where T : notnull
 {
     public void Message(T message);
-}
-
-public interface IHandleMessageEnvelope<T> : IHandleMessage<Envelope<T>>
-    where T : notnull
-{
 }
 
 public class DownCastHandler<TNext> : IHandleMessage<TNext>
@@ -91,21 +85,6 @@ public class UpCastEnvelopeHandler<TNext> : IHandleMessage<Envelope>
     }
 }
 
-public class EnvelopeTypeMatchingHandler : IHandleMessage<Envelope>
-{
-    private readonly ImmutableDictionary<Type, IHandleMessage<object>> _handlers;
-
-    public EnvelopeTypeMatchingHandler(IEnumerable<IHandleMessage<object>> handlers)
-    {
-        _handlers = handlers.ToImmutableDictionary(h => h.GetType().GetGenericArguments().First());
-    }
-
-    public void Message(Envelope message)
-    {
-        var handler = _handlers[message.Type];
-        handler.Message(message.Body);
-    }
-}
 public class EnvelopeMatchingHandler : IHandleMessage<Envelope>
 {
     private readonly ImmutableDictionary<Type, IHandleMessage<Envelope>> _handlers;
@@ -115,11 +94,12 @@ public class EnvelopeMatchingHandler : IHandleMessage<Envelope>
         _handlers = handlers.ToImmutableDictionary(handler =>
         {
             var envelopeTypeFromHandler = handler.GetType().GetGenericArguments().First();
-            if (envelopeTypeFromHandler.IsGenericType)
+            if (envelopeTypeFromHandler.IsGenericType && envelopeTypeFromHandler.GetGenericTypeDefinition() == typeof(Envelope<>))
             {
                 var messageType = envelopeTypeFromHandler.GetGenericArguments().First();
                 return messageType;
             }
+
             return envelopeTypeFromHandler;
         });
     }
@@ -155,14 +135,14 @@ public class EnvelopeHandler : IHandleMessage<BasicDeliverEventArgs>
 
             var metadata = new Dictionary<string, string>
             {
-                [Metadata.MessageId] = message.BasicProperties.MessageId,
-                [Metadata.CorrelationId] = message.BasicProperties.CorrelationId,
-                [Metadata.SentAt] =
+                [Headers.MessageId] = message.BasicProperties.MessageId,
+                [Headers.CorrelationId] = message.BasicProperties.CorrelationId,
+                [Headers.SentAt] =
                     new DateTime(message.BasicProperties.Timestamp.UnixTime).ToString(CultureInfo.InvariantCulture)
             };
             if (message.BasicProperties.Headers != null &&
-                message.BasicProperties.Headers.TryGetValue(Metadata.CausationId, out var value))
-                metadata[Metadata.CausationId] = (string)value;
+                message.BasicProperties.Headers.TryGetValue(Headers.CausationId, out var value))
+                metadata[Headers.CausationId] = (string)value;
             var envelope = Envelope.Create(deserialized, metadata);
             _handler.Message(envelope);
         }
@@ -344,133 +324,5 @@ public class RabbitMqEventHandler<TNeededToMakeTheHostUnique> : IHostedService, 
     {
         _model.Abort();
         return Task.CompletedTask;
-    }
-}
-
-public static class Metadata
-{
-    public const string CorrelationId = "CorrelationId";
-    public const string CausationId = "CausationId";
-    public const string MessageId = "MessageId";
-    public const string SentAt = "SentAt";
-}
-
-public class Envelope
-{
-    public Envelope(Type type, object body)
-    {
-        Type = type;
-        Body = body;
-    }
-
-    private static string NewId() => Guid.NewGuid().ToString();
-
-    public static Envelope Create(object content, IDictionary<string, string> metadata)
-    {
-        var genericType = typeof(Envelope<>).MakeGenericType(content.GetType());
-        var envelope = (Envelope)Activator.CreateInstance(genericType, content)!;
-        envelope.Metadata = metadata;
-        return envelope;
-    }
-
-    public static Envelope Create<T>(T content) where T : notnull
-    {
-        return new Envelope<T>(content)
-        {
-            Metadata =
-            {
-                [MessageSample.Metadata.CorrelationId] = NewId(),
-                [MessageSample.Metadata.MessageId] = NewId(),
-                [MessageSample.Metadata.SentAt] = DateTime.UtcNow.ToString(CultureInfo.InvariantCulture)
-            }
-        };
-    }
-
-    public static Envelope Create<T>(T content, IDictionary<string, string> existingMetadata) where T : notnull
-    {
-        return new Envelope<T>(content)
-        {
-            Metadata = new Dictionary<string, string>(existingMetadata)
-            {
-                [MessageSample.Metadata.CorrelationId] = GetValueOrNewId(MessageSample.Metadata.CorrelationId),
-                [MessageSample.Metadata.CausationId] = GetValueOrNewId(MessageSample.Metadata.MessageId),
-                [MessageSample.Metadata.MessageId] = NewId(),
-                [MessageSample.Metadata.SentAt] = DateTime.UtcNow.ToString(CultureInfo.InvariantCulture)
-            }
-        };
-
-        string GetValueOrNewId(string key)
-        {
-            return existingMetadata.TryGetValue(key, out var value) ? value : NewId();
-        }
-    }
-
-    public Type Type { get; }
-    public object Body { get; }
-    public IDictionary<string, string> Metadata { get; set; } = new Dictionary<string, string>();
-}
-
-public class Envelope<T> : Envelope where T : notnull
-{
-    public Envelope(T body) : base(body.GetType(), body)
-    {
-        Body = body;
-    }
-
-    public new T Body { get; }
-}
-
-public static class EnvelopeExtensions
-{
-    public static byte[] Serialize<T>(this T value)
-    {
-        var serialized = JsonSerializer.Serialize(value);
-        return Encoding.UTF8.GetBytes(serialized);
-    }
-
-    public static T? TryDeserialize<T>(this ReadOnlySpan<byte> bytes)
-    {
-        try
-        {
-            return JsonSerializer.Deserialize<T>(bytes);
-        }
-        catch (JsonException)
-        {
-            return default;
-        }
-    }
-
-    public static T Deserialize<T>(this ReadOnlySpan<byte> bytes)
-    {
-        try
-        {
-            var result = JsonSerializer.Deserialize<T>(bytes);
-            if (result is null)
-                throw new Exception(
-                    $"Could not deserialize {Encoding.UTF8.GetString(bytes)} into {typeof(T).FullName}");
-            return result;
-        }
-        catch (JsonException e)
-        {
-            var content = Encoding.UTF8.GetString(bytes);
-            throw new JsonException($"Could not deserialize {content}", e);
-        }
-    }
-
-    public static object? Deserialize(this ReadOnlySpan<byte> bytes, Type type)
-    {
-        return JsonSerializer.Deserialize(bytes, type);
-    }
-
-    public static void Send(this IModel model, string queue, Envelope envelope)
-    {
-        var properties = model.CreateBasicProperties();
-        properties.Type = envelope.Type.FullName;
-        properties.CorrelationId = envelope.Metadata[Metadata.CorrelationId];
-        properties.MessageId = envelope.Metadata[Metadata.MessageId];
-        properties.Headers = envelope.Metadata.ToDictionary(x => x.Key, x => (object)x.Value);
-        model.BasicPublish("", queue,
-            basicProperties: properties,
-            body: envelope.Body.Serialize());
     }
 }
