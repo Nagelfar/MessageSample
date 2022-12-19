@@ -30,6 +30,6 @@ public class FoodPreparationHandler : IHandleMessageEnvelope<CookFood>
             Order = message.Body.Order,
             Food = message.Body.Food
         };
-        _model.Send(Topology.DeliveryQueue, Envelope.Create(command));
+        _model.Send(Topology.DeliveryQueue, Envelope.Create(command, message.Metadata));
     }
 }

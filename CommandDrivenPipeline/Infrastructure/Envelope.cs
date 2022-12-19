@@ -34,13 +34,13 @@ public class Envelope
         return envelope;
     }
 
-    public static Envelope Create<T>(T content) where T : notnull
+    public static Envelope Create<T>(T content, string? correlationId = null) where T : notnull
     {
         return new Envelope<T>(content)
         {
             Metadata =
             {
-                [Headers.CorrelationId] = NewId(),
+                [Headers.CorrelationId] = correlationId ?? NewId(),
                 [Headers.MessageId] = NewId(),
                 [Headers.SentAt] = DateTime.UtcNow.ToString(CultureInfo.InvariantCulture)
             }

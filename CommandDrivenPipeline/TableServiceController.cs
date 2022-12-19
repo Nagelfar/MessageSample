@@ -24,7 +24,7 @@ public class TableServiceController : ControllerBase
         _model = connection.CreateModel();
     }
 
-    private void SendToCook(int orderId, int[] food)
+    private void SendToCook(int orderId, int[] food, string correlationId)
     {
         var cookFoodCommands =
             food
@@ -33,11 +33,11 @@ public class TableServiceController : ControllerBase
 
         foreach (var command in cookFoodCommands)
         {
-            _model.Send(Topology.FoodPreparationQueue, Envelope.Create(command));
+            _model.Send(Topology.FoodPreparationQueue, Envelope.Create(command,correlationId));
         }
     }
 
-    private void SendToDelivery(int orderId, int[] drink, int guest)
+    private void SendToDelivery(int orderId, int[] drink, int guest, string correlationId)
     {
         var command = new DeliverItems
         {
@@ -45,7 +45,7 @@ public class TableServiceController : ControllerBase
             Drinks = drink,
             Guest = guest
         };
-        _model.Send(Topology.DeliveryQueue, Envelope.Create(command));
+        _model.Send(Topology.DeliveryQueue, Envelope.Create(command,correlationId));
     }
 
     [HttpPost("orders")]
@@ -54,11 +54,12 @@ public class TableServiceController : ControllerBase
         if (order == null || order.Guest < 0 || order.Food.Any(food => food < 0) || order.Drink.Any(drink => drink < 0))
             return this.BadRequest("You provided an invalid model");
         var currentOrder = Interlocked.Increment(ref Orders);
+        var correlationId = $"order-request-{currentOrder}";
         try
         {
             _model.TxSelect();
-            SendToCook(currentOrder, order.Food);
-            SendToDelivery(currentOrder, order.Drink, order.Guest);
+            SendToCook(currentOrder, order.Food,correlationId);
+            SendToDelivery(currentOrder, order.Drink, order.Guest,correlationId);
             _model.TxCommit();
         }
         catch (Exception e)

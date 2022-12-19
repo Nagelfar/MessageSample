@@ -141,8 +141,8 @@ public class EnvelopeHandler : IHandleMessage<BasicDeliverEventArgs>
                     new DateTime(message.BasicProperties.Timestamp.UnixTime).ToString(CultureInfo.InvariantCulture)
             };
             if (message.BasicProperties.Headers != null &&
-                message.BasicProperties.Headers.TryGetValue(Headers.CausationId, out var value))
-                metadata[Headers.CausationId] = (string)value;
+                message.BasicProperties.Headers.TryGetValue(Headers.CausationId, out var value) && value is byte[] bytes )
+                metadata[Headers.CausationId] = Encoding.UTF8.GetString(bytes);
             var envelope = Envelope.Create(deserialized, metadata);
             _handler.Message(envelope);
         }
