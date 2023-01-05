@@ -5,7 +5,7 @@ using System.Text;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
-namespace MessageSample.CommandDrivenPipeline;
+namespace MessageSample.Saga;
 
 public interface IHandleMessage<in T> where T : notnull
 {
@@ -241,6 +241,7 @@ public class IdempotencyHandler<T> : IHandleMessage<T> where T : notnull
         if (_receivedMessages.ContainsKey(hash))
         {
             _logger.LogInformation("Already received and processed {@Message} - will ignore it", message);
+            return;
         }
 
         _next.Message(message);
