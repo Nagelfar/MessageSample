@@ -1,10 +1,5 @@
-using System.Collections.Concurrent;
-using System.Collections.Immutable;
-using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using RabbitMQ.Client;
-using RabbitMQ.Client.Events;
 
 namespace MessageSample;
 
@@ -49,6 +44,5 @@ public static class SerializationExtensions
     {
         return JsonSerializer.Deserialize(bytes, type);
     }
-
 }
 

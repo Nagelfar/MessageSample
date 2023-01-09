@@ -9,7 +9,9 @@ All variations are implemented with the same two parts:
 
 ## Starting the Application
 
-First run a Rabbit MQ instance
+### Running RabbitMQ
+
+For all examples except the saga the following configuration for RabbitMQ is sufficient:
 
     docker run -d \
         --hostname messagesample-rabbit \
@@ -18,7 +20,19 @@ First run a Rabbit MQ instance
         -p 15672:15672 \
         rabbitmq:3-management
 
+For the **Saga** example the [Delayed Messaging Plugin](https://github.com/rabbitmq/rabbitmq-delayed-message-exchange) of Rabbit MQ is needed and provided by the `broker/Dockerfile`.
+
+    docker build broker -t broker
+    docker run -d \
+        --hostname messagesample-rabbit-delayed \
+        --name messagesample-rabbit-delayed \
+        -p 5672:5672 \
+        -p 15672:15672 \
+        broker
+
 Note: the default user `guest` and password `guest` should be sufficient and the management UI can be used for introspection
+
+### Running the Application
 
 Then build the application
 
@@ -72,4 +86,23 @@ graph TD
     F --> |OrderDocument| to --> qd --> D
     classDef exchange fill:#f96,stroke:#333,stroke-width:3px,color:white;
     class to exchange
+``` 
+
+### Saga Based
+
+```mermaid
+graph TD
+    A[TableService] -->|OrderPlaced| tt((saga-tableservice))
+    tt --> qss[(saga-orderfulfillment)] --> |OrderPlaced| S[OrderFulfillmentSaga]
+    S --> |PrepareFood| F[FoodPrep]
+    F --> |FoodCooked| tf((saga-FoodPrep))
+    tf --> qss
+    S --> |DeliverCookedFood| D[Delivery]
+    D --> |ItemsDelivered| td((saga-delivery))
+    td --> qss
+    S --> |DeliverDrinks| D
+    S --> |TimeoutMessage| tst((saga-timeouts))
+    tst --> qss
+    classDef exchange fill:#f96,stroke:#333,stroke-width:3px,color:white;
+    class tt,tf,td,tst exchange
 ``` 

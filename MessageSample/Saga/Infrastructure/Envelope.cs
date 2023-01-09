@@ -69,6 +69,7 @@ public class Envelope
     public Type Type { get; }
     public object Body { get; }
     public IDictionary<string, string> Metadata { get; set; } = new Dictionary<string, string>();
+    public string? CorrelationId => Metadata[Headers.CorrelationId];
 }
 
 public class Envelope<T> : Envelope where T : notnull
@@ -85,8 +86,22 @@ public static class EnvelopeExtensions
 {
     public static Envelope CorrelateWith<T>(this Envelope envelope, T nextMessage)
     {
-        return Envelope.Create(nextMessage, envelope.Metadata);
+        return Envelope.Create<T>(nextMessage, envelope.Metadata);
     }
+
+    public static void Publish(this IModel model, string topic, Envelope envelope, string routingKey = null)
+    {
+        var properties = model.CreateBasicProperties();
+        properties.Type = envelope.Type.FullName;
+        properties.CorrelationId = envelope.Metadata[Headers.CorrelationId];
+        properties.MessageId = envelope.Metadata[Headers.MessageId];
+        properties.Headers = envelope.Metadata.ToDictionary(x => x.Key, x => (object)x.Value);
+        model.BasicPublish(topic, routingKey ?? "",
+            basicProperties: properties,
+            body: envelope.Body.Serialize());
+    }
+
+
     public static void Send(this IModel model, string queue, Envelope envelope)
     {
         var properties = model.CreateBasicProperties();
@@ -98,6 +113,7 @@ public static class EnvelopeExtensions
             basicProperties: properties,
             body: envelope.Body.Serialize());
     }
+
     public static void Send(this IModel model, string queue, IEnumerable<Envelope> envelopes)
     {
         var batch = model.CreateBasicPublishBatch();
@@ -110,6 +126,7 @@ public static class EnvelopeExtensions
             properties.Headers = envelope.Metadata.ToDictionary(x => x.Key, x => (object)x.Value);
             batch.Add("", queue, false, properties, envelope.Body.Serialize());
         }
+
         batch.Publish();
     }
 }

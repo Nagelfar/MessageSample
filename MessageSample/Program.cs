@@ -43,6 +43,7 @@ if (builder.Configuration.GetValue<bool>("Consumers"))
     MessageSample.EventDriven.Topology.Configure(builder);
     MessageSample.DocumentDriven.Topology.Configure(builder);
     MessageSample.CommandDrivenPipeline.Topology.Configure(builder);
+    MessageSample.Saga.Topology.Configure(builder);
 }
 else
 {
@@ -75,6 +76,7 @@ MessageSample.CommandDriven.Topology.DefineTopology(app);
 MessageSample.EventDriven.Topology.DefineTopology(app);
 MessageSample.DocumentDriven.Topology.DefineTopology(app);
 MessageSample.CommandDrivenPipeline.Topology.DefineTopology(app);
+MessageSample.Saga.Topology.DefineTopology(app);
 
 Log.Information("Starting the application....");
 

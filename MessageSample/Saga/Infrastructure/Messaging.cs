@@ -327,3 +327,84 @@ public class RabbitMqEventHandler<TNeededToMakeTheHostUnique> : IHostedService, 
         return Task.CompletedTask;
     }
 }
+
+
+public interface IHandleTimeout<T> where T : notnull
+{
+    void Timeout(Envelope<T> message);
+}
+
+public class TimeoutMessage
+{
+    public DateTimeOffset TimeoutRequestedAt { get; set; }
+    public DateTimeOffset TimeoutRequestedFor { get; set; }
+    public string MessageType { get; set; }
+    public byte[] Message { get; set; }
+}
+
+
+public class SagaBase<TState> :
+    IHandleMessageEnvelope<TimeoutMessage>
+    where TState : new()
+{
+    private readonly IModel _model;
+    private readonly HashSet<Type> _timeoutHandlers;
+
+    // TODO: use real persistence
+    private static readonly IDictionary<string, TState> _states = new Dictionary<string, TState>();
+
+    protected TState State(string correlation)
+    {
+        if (!_states.ContainsKey(correlation))
+            _states.Add(correlation, new TState());
+        return _states[correlation];
+    }
+
+    public SagaBase(IConnection connection)
+    {
+        _model = connection.CreateModel();
+        _timeoutHandlers =
+            this.GetType().GetInterfaces()
+                .Where(x => x.GetGenericTypeDefinition() == typeof(IHandleTimeout<>))
+                .Select(x => x.GetGenericArguments().First())
+                .ToHashSet();
+    }
+
+    protected void Send(string queue, IEnumerable<Envelope> envelopes)
+    {
+        _model.Send(queue, envelopes);
+    }
+
+    protected void Send(string queue, Envelope envelope)
+    {
+        _model.Send(queue, envelope);
+    }
+
+    protected void RequestTimeout(Envelope message, TimeSpan when)
+    {
+        var timeoutMessage = new TimeoutMessage
+        {
+            Message = message.Body.Serialize(),
+            MessageType = message.Type.FullName,
+            TimeoutRequestedAt = DateTimeOffset.Now,
+            TimeoutRequestedFor = DateTimeOffset.Now.Add(when)
+        };
+        _model.Publish(Topology.SagaTimeouts, Envelope.Create(timeoutMessage,
+            new Dictionary<string, string>(message.Metadata)
+            {
+                { "x-delay", when.TotalMilliseconds.ToString() }
+            }));
+    }
+
+    void IHandleMessage<Envelope<TimeoutMessage>>.Message(Envelope<TimeoutMessage> timeoutMessage)
+    {
+        var messageType = Type.GetType(timeoutMessage.Body.MessageType);
+        if (messageType != null && _timeoutHandlers.Contains(messageType))
+        {
+            var message = new ReadOnlySpan<byte>(timeoutMessage.Body.Message).Deserialize(messageType);
+            var envelope = Envelope.Create(message, timeoutMessage.Metadata);
+            dynamic target = this;
+            target.Timeout((dynamic)envelope);
+        }
+    }
+}

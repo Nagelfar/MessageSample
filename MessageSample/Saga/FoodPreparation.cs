@@ -25,11 +25,11 @@ public class FoodPreparationHandler : IHandleMessageEnvelope<CookFood>
         _logger.LogInformation("CommandDrivenPipeline: Cooking Food for {@Command}", message.Body);
         Thread.Sleep(2000);
         _logger.LogInformation("CommandDrivenPipeline: Food was cooked for {@Message}", message.Body);
-        var command = new DeliverCookedFood
+        var foodCookedEvent = new FoodCooked
         {
-            Order = message.Body.Order,
-            Food = message.Body.Food
+            Food = message.Body.Food,
+            Order = message.Body.Order
         };
-        _model.Send(Topology.DeliveryQueue, Envelope.Create(command, message.Metadata));
+        _model.Publish(Topology.FoodPreparationTopic, message.CorrelateWith(foodCookedEvent));
     }
 }

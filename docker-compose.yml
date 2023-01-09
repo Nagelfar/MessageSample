@@ -38,7 +38,7 @@ services:
       - message-bus
   
   message-bus:
-    image: rabbitmq:3-management
+    build: broker
     #    volumes:
     #      - ./rabbitmq.conf:/etc/rabbitmq/conf.d/rabbitmq.conf 
     ports:
