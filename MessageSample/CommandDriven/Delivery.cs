@@ -21,7 +21,7 @@ public class Delivery : IDisposable, IHostedService
 
     private void OnMessage(BasicDeliverEventArgs ea)
     {
-        if (ea.Body.Span.TryDeserialize<DeliverItems>() is { } deliver && deliver.Drinks.Any())
+        if (ea.Body.Span.TryDeserialize<DeliverItems>() is { } deliver && deliver.Drinks != null && deliver.Drinks.Any())
             _logger.LogInformation("CommandDriven: Delivering Order Items for {@Message}", deliver);
         else if (ea.Body.Span.TryDeserialize<DeliverCookedFood>() is { } cooked)
         {
