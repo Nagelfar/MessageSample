@@ -30,7 +30,7 @@ For the **Saga** example the [Delayed Messaging Plugin](https://github.com/rabbi
         -p 15672:15672 \
         broker
 
-Note: the default user `guest` and password `guest` should be sufficient and the management UI can be used for introspection
+Note: the default user `guest` and password `guest` should be sufficient and the management UI (running under <http://localhost:15672/>) can be used for introspection.
 
 ### Running the Application
 
@@ -38,7 +38,7 @@ Then build the application
 
     dotnet build
 
-Now start the OpenAPI based web application
+Now start the OpenAPI based web application (and launch it via <http://localhost:5048/swagger>)
 
     ASPNETCORE_ENVIRONMENT=Development Controllers=true Consumers=false ASPNETCORE_URLS=http://+:5048 \
         dotnet run \

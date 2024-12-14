@@ -15,6 +15,7 @@ public class FoodPreparationHandler : IHandleMessageEnvelope<CookFood>
     {
         _logger = logger;
         _model = connection.CreateModel();
+        _model.BasicQos(0,1,false);
     }
 
     public void Message(Envelope<CookFood> message)
