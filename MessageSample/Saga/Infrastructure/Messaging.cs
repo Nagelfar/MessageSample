@@ -288,6 +288,7 @@ public class RabbitMqEventHandler<TNeededToMakeTheHostUnique> : IHostedService, 
         _queue = queue;
         _next = next;
         _model = connection.CreateModel();
+        _model.BasicQos(0,1,false);
         _consumer = new EventingBasicConsumer(_model);
         _consumer.Received += (_, ea) => { OnMessage(ea); };
     }

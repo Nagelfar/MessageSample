@@ -282,12 +282,15 @@ public class RabbitMqEventHandler<TNeededToMakeTheHostUnique> : IHostedService, 
     private readonly EventingBasicConsumer _consumer;
     private readonly string _queue;
     private readonly IHandleMessage<BasicDeliverEventArgs> _next;
+    private readonly ILogger<RabbitMqEventHandler<TNeededToMakeTheHostUnique>> _logger;
 
-    public RabbitMqEventHandler(IConnection connection, string queue, IHandleMessage<BasicDeliverEventArgs> next)
+    public RabbitMqEventHandler(IConnection connection, string queue, IHandleMessage<BasicDeliverEventArgs> next, ILogger<RabbitMqEventHandler<TNeededToMakeTheHostUnique>> logger)
     {
         _queue = queue;
         _next = next;
+        _logger = logger;
         _model = connection.CreateModel();
+        _model.BasicQos(0,1,false);
         _consumer = new EventingBasicConsumer(_model);
         _consumer.Received += (_, ea) => { OnMessage(ea); };
     }
@@ -301,8 +304,17 @@ public class RabbitMqEventHandler<TNeededToMakeTheHostUnique> : IHostedService, 
         }
         catch (Exception e)
         {
-            Console.WriteLine(e);
-            _model.BasicNack(ea.DeliveryTag, false, true);
+            _logger.LogError(e, "CommandDriven: Failed to handle message");
+            if (ea.Redelivered)
+            {
+                _logger.LogInformation(e, "CommandDriven: Deadlettering");
+                _model.BasicReject(ea.DeliveryTag, false);
+            }
+            else
+            {
+                _model.BasicNack(ea.DeliveryTag, false, true);
+            }
+
             throw;
         }
     }

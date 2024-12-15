@@ -4,19 +4,20 @@ namespace MessageSample.Saga;
 
 public static class Topology
 {
-    public const string TableServiceTopic = "saga-tableservice";
-    public const string DeliveryTopic = "saga-delivery";
-    public const string FoodPreparationTopic = "saga-foodprep";
+    public const string TableServiceTopic = "saga.tableservice";
+    public const string DeliveryTopic = "saga.delivery";
+    public const string FoodPreparationTopic = "saga.foodprep";
 
-    public const string FoodPreparationQueue = "saga-foodprep";
-    public const string DeliveryQueue = "saga-delivery";
+    public const string FoodPreparationQueue = "saga.foodprep";
+    public const string DeliveryQueue = "saga.delivery";
 
-    public const string SagaOrderFulfillment = "saga-orderfulfillment";
-    public const string SagaTimeouts = "saga-timeouts";
+    public const string SagaOrderFulfillment = "saga.orderfulfillment";
+    public const string SagaTimeouts = "saga.timeouts";
 
     public static void DefineTopology(WebApplication app)
     {
         using var channel = app.Services.GetRequiredService<IConnection>().CreateModel();
+        var dlqArgs = channel.PrepareDqlFor("saga");
         channel.ExchangeDeclare(
             exchange: TableServiceTopic,
             ExchangeType.Topic,
@@ -42,19 +43,19 @@ public static class Topology
             durable: false,
             exclusive: false,
             autoDelete: false,
-            arguments: null);
+            arguments: dlqArgs);
 
         channel.QueueDeclare(queue: DeliveryQueue,
             durable: false,
             exclusive: false,
             autoDelete: false,
-            arguments: null);
+            arguments: dlqArgs);
 
         channel.QueueDeclare(queue: SagaOrderFulfillment,
             durable: false,
             exclusive: false,
             autoDelete: false,
-            arguments: null);
+            arguments: dlqArgs);
 
         channel.ExchangeDeclare(
             exchange: SagaTimeouts,

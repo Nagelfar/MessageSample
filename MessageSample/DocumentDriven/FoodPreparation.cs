@@ -8,14 +8,16 @@ namespace MessageSample.DocumentDriven;
 public class FoodPreparation : IDisposable, IHostedService
 {
     private readonly ILogger<FoodPreparation> _logger;
+    private readonly FaultyCookImplementation _faultyCookImplementation;
     private readonly IModel _model;
     private readonly EventingBasicConsumer _consumer;
 
     private static ISet<int> _finishedOrders = new HashSet<int>();
 
-    public FoodPreparation(IConnection connection, ILogger<FoodPreparation> logger)
+    public FoodPreparation(IConnection connection, ILogger<FoodPreparation> logger,FaultyCookImplementation faultyCookImplementation)
     {
         _logger = logger;
+        _faultyCookImplementation = faultyCookImplementation;
         _model = connection.CreateModel();
         _model.BasicQos(0,1,false);
         _consumer = new EventingBasicConsumer(_model);
@@ -31,7 +33,7 @@ public class FoodPreparation : IDisposable, IHostedService
         else
         {
             _logger.LogInformation("DocumentDriven: Will start cooking {@Food}", message.OrderedFood);
-            Thread.Sleep(1000);
+            _faultyCookImplementation.Operate();
             _logger.LogInformation("DocumentDriven: Finished cooking {@Food}", message.OrderedFood);
             var newOrder = message.Clone();
             newOrder.CookedFood = message.OrderedFood;

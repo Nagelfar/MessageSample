@@ -38,7 +38,9 @@ builder.Services.AddSingleton<IConnection>(_ => factory.CreateConnection());
 
 if (builder.Configuration.GetValue<bool>("Consumers"))
 {
-    Log.Logger.Information("Starting Consumers");
+    var faultyCook = FaultyCookImplementation.Create(builder.Configuration.GetValue("FaultyCook", 0.0));
+    builder.Services.AddSingleton(faultyCook);
+    Log.Logger.Information("Starting Consumers with {FaultyCook} FaultyCook", faultyCook.FaultThreshold);
     MessageSample.CommandDriven.Topology.Configure(builder);
     MessageSample.EventDriven.Topology.Configure(builder);
     MessageSample.DocumentDriven.Topology.Configure(builder);
@@ -108,4 +110,22 @@ void WaitUntilRabbitMqIsReady(ConnectionFactory factory)
     }
 
     Log.Information("RabbitMQ is Ready {Connection} {Host}", factory.Uri, factory.HostName);
+}
+
+public static class IModelExtensions
+{
+    public static Dictionary<string, object> PrepareDqlFor(this IModel channel, string prefix)
+    {
+        var exchangeName = prefix + ".dead-letter-exchange";
+        var dlqQueueName = prefix + ".dlq";
+        channel.ExchangeDeclare(exchangeName, "fanout", durable: true);
+
+        channel.QueueDeclare(dlqQueueName, true, false, false, null);
+        channel.QueueBind(dlqQueueName, exchangeName, "#");
+
+        return new Dictionary<string, object>()
+        {
+            { "x-dead-letter-exchange", exchangeName }
+        };
+    }
 }

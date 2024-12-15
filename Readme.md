@@ -52,6 +52,14 @@ Lastly start one or several consumers (mind the ports!)
             --no-build \
             --no-launch-profile
 
+To enable random errors during consumption of the Cook use the following `FaultyCook=0....1` setting:
+
+    ASPNETCORE_ENVIRONMENT=Development Controllers=false Consumers=true FaultyCook=0.1 ASPNETCORE_URLS=http://+:8001 \
+        dotnet run \
+            --no-build \
+            --no-launch-profile
+
+
 
 ## Visualizations of the topologies & communication
 

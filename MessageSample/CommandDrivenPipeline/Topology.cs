@@ -4,22 +4,24 @@ namespace MessageSample.CommandDrivenPipeline;
 
 public static class Topology
 {
-    public const string FoodPreparationQueue = "commands-pipeline-cook";
-    public const string DeliveryQueue = "commands-pipeline-delivery";
+    public const string FoodPreparationQueue = "commands-pipeline.cook";
+    public const string DeliveryQueue = "commands-pipeline.delivery";
 
     public static void DefineTopology(WebApplication app)
     {
         using var channel = app.Services.GetRequiredService<IConnection>().CreateModel();
+        channel.BasicQos(0, 1, false);
+        var dlqArgs = channel.PrepareDqlFor("commands-pipeline");
         channel.QueueDeclare(queue: FoodPreparationQueue,
             durable: false,
             exclusive: false,
             autoDelete: false,
-            arguments: null);
+            arguments: dlqArgs);
         channel.QueueDeclare(queue: DeliveryQueue,
             durable: false,
             exclusive: false,
             autoDelete: false,
-            arguments: null);
+            arguments: dlqArgs);
     }
 
     private static void ConfigureFor<TMessage>(this WebApplicationBuilder builder, string queue)
@@ -31,7 +33,8 @@ public static class Topology
                 queue,
                 new DeserializingHandler<TMessage>(
                     services.ResolveHandler<TMessage>()
-                )
+                ),
+                services.GetLogger<RabbitMqEventHandler<TMessage>>()
             )
         );
     }
@@ -74,7 +77,8 @@ public static class Topology
                             ),
                         logger: services.GetLogger<IdempotencyHandler<Envelope>>()
                     )
-                )
+                ),
+                services.GetLogger<RabbitMqEventHandler<TMessage>>()
             )
         );
     }

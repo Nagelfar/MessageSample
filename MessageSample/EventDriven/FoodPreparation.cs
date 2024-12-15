@@ -8,12 +8,14 @@ namespace MessageSample.EventDriven;
 public class FoodPreparation : IDisposable, IHostedService
 {
     private readonly ILogger<FoodPreparation> _logger;
+    private readonly FaultyCookImplementation _cookImplementation;
     private readonly IModel _model;
     private readonly EventingBasicConsumer _consumer;
 
-    public FoodPreparation(IConnection connection, ILogger<FoodPreparation> logger)
+    public FoodPreparation(IConnection connection, ILogger<FoodPreparation> logger, FaultyCookImplementation cookImplementation)
     {
         _logger = logger;
+        _cookImplementation = cookImplementation;
         _model = connection.CreateModel();
         _model.BasicQos(0,1,false);
         _consumer = new EventingBasicConsumer(_model);
@@ -30,7 +32,7 @@ public class FoodPreparation : IDisposable, IHostedService
             if (deserialized.Food.Any())
             {
                 _logger.LogInformation("EventDriven: Will start cooking {@Food}", deserialized.Food);
-                Thread.Sleep(1000);
+                _cookImplementation.Operate();
                 _logger.LogInformation("EventDriven: Finished cooking {@Food}", deserialized.Food);
 
                 var foodCookedEvents =

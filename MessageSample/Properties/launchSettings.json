@@ -39,6 +39,15 @@
         "ASPNETCORE_ENVIRONMENT": "Development",
         "Consumers": "true"
       }
+    },
+    "consumers-only-faulty": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Consumers": "true",
+        "FaultyCook": "1.0"
+      }
     }
   }
 }
